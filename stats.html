@@ -1,0 +1,17 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Stats</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap"><h1 style="font-size:30px">📊 Stats</h1>
+<p class="note">Counts via Abacus. Visitors = once per browser per day. Bots may inflate numbers.</p>
+<div class="grid" id="g"></div><h2>By language</h2><div class="grid" id="l"></div>
+<script>
+var B="https://abacus.jasoncameron.dev/get/vnc-hs5-4f9a7c21/";
+function g(k){return fetch(B+k).then(function(r){return r.ok?r.json():{value:0}}).then(function(j){return j.value||0}).catch(function(){return 0})}
+function card(t,v){return '<div class="card"><b>'+v+'</b><p>'+t+'</p></div>'}
+function run(){Promise.all(["views","visitors","clicks"].map(g)).then(function(a){
+var ctr=a[1]?Math.round(a[2]/a[1]*1000)/10+"%":"-";
+document.getElementById("g").innerHTML=card("Page views",a[0])+card("Unique visitors (daily)",a[1])+card("Link clicks",a[2])+card("Click rate (clicks / visitors)",ctr)});
+var L=["fa","en","ar","tr","ru"];
+Promise.all(L.map(function(l){return Promise.all([g("visitors-"+l),g("clicks-"+l)])})).then(function(r){
+document.getElementById("l").innerHTML=r.map(function(x,i){return card(L[i]+": visitors / clicks",x[0]+" / "+x[1])}).join("")})}
+run();setInterval(run,30000);
+</script></div></body></html>

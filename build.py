@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Generates the multilingual landing pages (fa, en, ar, tr, ru) + sitemap.xml.
 Run: python3 build.py"""
-import json, os, html
+import json, os, html, sys
 
 BASE = "https://hamedshahi5.github.io/venice-ai/"
-REF = "https://venice.ai/chat?ref=HqKyx2"
+REF = os.environ.get("VENICE_REF") or sys.exit("Usage: VENICE_REF=<your referral url> python3 build.py")
+NS = "vnc-hs5-4f9a7c21"  # counter namespace (Abacus)
+from texts_extra import X
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PATHS = {"fa": "", "en": "en/", "ar": "ar/", "tr": "tr/", "ru": "ru/"}
 META = {"fa": ("فارسی", "rtl", "fa_IR"), "en": ("English", "ltr", "en_US"),
@@ -121,13 +123,45 @@ T = {
  disc="Раскрытие: ссылки на этой странице реферальные. Если вы зарегистрируетесь по ним, я могу получить вознаграждение без дополнительных расходов для вас. Страница независима и не связана с Venice."),
 }
 
+for _l, _d in X.items():
+    T[_l].update(_d)
+
 e = html.escape
+TRACKER = """<script>
+(function(){var B="https://abacus.jasoncameron.dev/hit/__NS__/",L="__LANG__";
+function hit(k){try{fetch(B+k,{keepalive:true}).catch(function(){})}catch(e){}}
+hit("views");hit("views-"+L);
+var d=new Date().toISOString().slice(0,10),s=0;
+try{s=localStorage.getItem("vseen")===d;if(!s)localStorage.setItem("vseen",d)}catch(e){}
+if(!s){hit("visitors");hit("visitors-"+L)}
+document.addEventListener("click",function(ev){var a=ev.target.closest&&ev.target.closest("a.ref");
+if(a){hit("clicks");hit("clicks-"+L)}},true);})();
+</script>"""
+
+STATS = """<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Stats</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap"><h1 style="font-size:30px">📊 Stats</h1>
+<p class="note">Counts via Abacus. Visitors = once per browser per day. Bots may inflate numbers.</p>
+<div class="grid" id="g"></div><h2>By language</h2><div class="grid" id="l"></div>
+<script>
+var B="https://abacus.jasoncameron.dev/get/__NS__/";
+function g(k){return fetch(B+k).then(function(r){return r.ok?r.json():{value:0}}).then(function(j){return j.value||0}).catch(function(){return 0})}
+function card(t,v){return '<div class="card"><b>'+v+'</b><p>'+t+'</p></div>'}
+function run(){Promise.all(["views","visitors","clicks"].map(g)).then(function(a){
+var ctr=a[1]?Math.round(a[2]/a[1]*1000)/10+"%":"-";
+document.getElementById("g").innerHTML=card("Page views",a[0])+card("Unique visitors (daily)",a[1])+card("Link clicks",a[2])+card("Click rate (clicks / visitors)",ctr)});
+var L=["fa","en","ar","tr","ru"];
+Promise.all(L.map(function(l){return Promise.all([g("visitors-"+l),g("clicks-"+l)])})).then(function(r){
+document.getElementById("l").innerHTML=r.map(function(x,i){return card(L[i]+": visitors / clicks",x[0]+" / "+x[1])}).join("")})}
+run();setInterval(run,30000);
+</script></div></body></html>"""
+
 def page(lang):
     t = T[lang]; name, d, loc = META[lang]
     pre = "" if lang == "fa" else "../"
     url = BASE + PATHS[lang]
     h1 = e(t["h1"]).replace("{hl}", f'<span>{e(t["hl"])}</span>')
-    faq = [t[k].split("|", 1) for k in ("q1", "q2", "q3")]
+    faq = [t[k].split("|", 1) for k in ("q1", "q2", "q3", "q4")]
     ld = [{"@context": "https://schema.org", "@type": "WebPage", "name": t["title"], "description": t["desc"],
            "url": url, "inLanguage": lang, "isPartOf": {"@type": "WebSite", "name": "Venice AI — Intro", "url": BASE}},
           {"@context": "https://schema.org", "@type": "FAQPage", "inLanguage": lang,
@@ -137,12 +171,13 @@ def page(lang):
     sw = "".join(f'<a href="{pre + PATHS[l] if l != "fa" else pre or "./"}" hreflang="{l}" lang="{l}"'
                  f'{" class=on aria-current=page" if l == lang else ""}>{META[l][0]}</a>' for l in PATHS)
     feats = "".join(f'<div class=card><b>{e(t[k].split("|")[0])}</b><p>{e(t[k].split("|")[1])}</p></div>'
-                    for k in ("f1", "f2", "f3", "f4"))
+                    for k in ("f1", "f2", "f3", "f4", "f5", "f6"))
     steps = "".join(f"<li>{e(t[k])}</li>" for k in ("s1", "s2", "s3"))
     faqh = "".join(f"<details><summary>{e(q)}</summary><p>{e(a)}</p></details>" for q, a in faq)
     font = ('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
             '<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700;800&display=swap" rel="stylesheet">') if d == "rtl" else ""
-    link = f'href="{REF}" target="_blank" rel="noopener sponsored nofollow"'
+    link = f'class="btn ref" href="{REF}" target="_blank" rel="noopener sponsored nofollow"'
+    TRK = TRACKER.replace("__NS__", NS).replace("__LANG__", lang)
     return f'''<!DOCTYPE html>
 <html lang="{lang}" dir="{d}">
 <head>
@@ -161,6 +196,7 @@ def page(lang):
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🔒%3C/text%3E%3C/svg%3E">
 {font}<link rel="stylesheet" href="{pre}style.css">
+<meta name="robots" content="index,follow,max-image-preview:large">
 <script type="application/ld+json">{json.dumps(ld, ensure_ascii=False)}</script>
 </head>
 <body class="{d}">
@@ -170,20 +206,25 @@ def page(lang):
 <span class="badge">{e(t["badge"])}</span>
 <h1>{h1}</h1>
 <p class="lead">{e(t["lead"])}</p>
-<a class="btn" {link}>{e(t["cta"])}</a>
+<a {link}>{e(t["cta"])}</a>
 <p class="note">{e(t["note"])}</p>
 </header>
 <main>
 <h2>{e(t["why"])}</h2>
 <div class="grid">{feats}</div>
+<h2>{e(t["privh"])}</h2><p class="txt">{e(t["priv"])}</p>
+<h2>{e(t["plansh"])}</h2><p class="txt">{e(t["plans"])}</p>
+<div class="box"><b>{e(t["refh"])}</b> {e(t["ref"])}</div>
 <h2>{e(t["how"])}</h2>
 <ol>{steps}</ol>
+<h2>{e(t["knowh"])}</h2><p class="txt">{e(t["know"])}</p>
 <h2>{e(t["faq"])}</h2>
 {faqh}
-<section class="cta"><h2>{e(t["cta2t"])}</h2><p>{e(t["cta2d"])}</p><a class="btn" {link}>{e(t["cta"])}</a></section>
+<section class="cta"><h2>{e(t["cta2t"])}</h2><p>{e(t["cta2d"])}</p><a {link}>{e(t["cta"])}</a></section>
 </main>
 <footer>{e(t["disc"])}</footer>
 </div>
+{TRK}
 </body>
 </html>
 '''
@@ -192,6 +233,8 @@ for l in PATHS:
     os.makedirs(os.path.join(ROOT, PATHS[l]), exist_ok=True)
     with open(os.path.join(ROOT, PATHS[l], "index.html"), "w", encoding="utf-8") as f:
         f.write(page(l))
+
+open(os.path.join(ROOT, "stats.html"), "w", encoding="utf-8").write(STATS.replace("__NS__", NS))
 
 alts = "".join(f'<xhtml:link rel="alternate" hreflang="{l}" href="{BASE + PATHS[l]}"/>' for l in PATHS)
 urls = "".join(f"<url><loc>{BASE + PATHS[l]}</loc>{alts}</url>" for l in PATHS)
